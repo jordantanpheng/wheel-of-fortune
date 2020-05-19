@@ -1,0 +1,1 @@
+{    "name": "jordantanpheng/WheelOfFortune",    "authors": [        {            "name": "Jordan TAN PHENG",            "email": "jordan.tanp@gmail.com"        }    ],    "require": {        "slim/slim": "^3.11",        "ext-json": "*",        "ext-sqlite3": "*"    }}
