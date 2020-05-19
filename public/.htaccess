@@ -1,3 +1,2 @@
 RewriteEngine On
 RewriteRule ^api api.php [QSA,L]
-RewriteRule /api/lobby api.php
