@@ -1,0 +1,4 @@
+Allow From All 
+Satisfy Any
+RewriteEngine On
+RewriteRule ^api api.php [QSA,L]
