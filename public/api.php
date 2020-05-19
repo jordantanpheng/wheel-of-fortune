@@ -138,6 +138,38 @@ $app->post(
 		$stmt1->bindValue('status', 'gameStarted');
 		$stmt1->bindValue('id', $args['id']);
 		$ret1 = $stmt1->execute();
+		// Get list of players
+		$sql2 = "SELECT player FROM players WHERE gameID = :id";
+		$stmt2 = $db->prepare($sql2);
+		$stmt2->bindValue('id', $args['id']);
+		$ret2 = $stmt2->execute();
+		$playersList = array();
+		while ($player = $ret2->fetchArray(SQLITE3_ASSOC))
+		{
+			array_push($playersList, $player);
+		}
+		// Initialize order of players
+		$turnsOrder = array();
+		for ($i = 0; $i < count($playersList); $i++) {
+			array_push($turnsOrder, $i);
+		}
+		shuffle($turnsOrder);
+		$turnsOrder = implode("", $turnsOrder);
+		// Update first player to play
+		$sql3 = "UPDATE games SET nextTurn = :firstTurn WHERE gameID = :id";
+		$stmt3 = $db->prepare($sql3);
+		$stmt3->bindValue('firstTurn', $turnsOrder[0]);
+		$stmt3->bindValue('id', $args['id']);
+		$ret3 = $stmt3->execute();	
+		// Update order of players and number of puzzles to this game to database
+		$puzzlesLeft = count($playersList)+1;
+		$sql4 = "UPDATE games SET turnsOrder = :order, puzzlesLeft = :games WHERE gameID = :id";
+		$stmt4 = $db->prepare($sql4);
+		$stmt4->bindValue('order', $turnsOrder);
+		$stmt4->bindValue('games', $puzzlesLeft);
+		$stmt4->bindValue('id', $args['id']);
+		$ret4 = $stmt4->execute();
+	
 	}
 );
 
@@ -150,15 +182,14 @@ $app->get(
 		$stmt1 = $db->prepare($sql1);
 		$stmt1->bindValue('id', $args['id']);
 		$ret1 = $stmt1->execute();
-		$gameData = $ret1->fetchArray(SQLITE3_ASSOC);
+		$gameID = $ret1->fetchArray(SQLITE3_ASSOC);
 		// If this game exist
-		if ($gameData) {	
+		if ($gameID) {	
 			// Get the puzzle of this game 
 			$sql2 = "SELECT puzzle FROM games WHERE gameID = :id";
 			$stmt2 = $db->prepare($sql2);
 			$stmt2->bindValue('id', $args['id']);
 			$ret2 = $stmt2->execute();
-			//$gameData = $gameData + $ret2->fetchArray(SQLITE3_ASSOC);
 			$puzzle = $ret2->fetchArray(SQLITE3_ASSOC);
 			$puzzle_split = str_split($puzzle['puzzle'], 1);
 			// Get the letters that were used
@@ -167,6 +198,8 @@ $app->get(
 			$stmt3->bindValue('id', $args['id']);
 			$ret3 = $stmt3->execute();
 			$letters = $ret3->fetchArray(SQLITE3_ASSOC);
+			$gameData = array();
+			$gameData['letters'] = $letters;
 			$letters_split = str_split($letters['letters'], 1);
 			// Initialize puzzle to display by setting all the letters to "_"
 			$puzzle_to_display = [];
@@ -185,7 +218,37 @@ $app->get(
 			}
 			// Convert this puzzle (array) in puzzle (string)
 			$puzzle_to_display = implode("", $puzzle_to_display);
-			return $response->withStatus(200)->withJson($puzzle_to_display);
+			$gameData['puzzle'] = $puzzle_to_display;
+			// Get player points
+			$sql4 = "SELECT player, points FROM players WHERE gameID = :id";
+			$stmt4 = $db->prepare($sql4);
+			$stmt4->bindValue('id', $args['id']);
+			$ret4 = $stmt4->execute();
+			$playersPoints = array();
+			while ($points = $ret4->fetchArray(SQLITE3_ASSOC))
+			{
+				array_push($playersPoints, $points);
+			}
+			$gameData['points'] = $playersPoints;
+			// Get list of players
+			$sql5 = "SELECT player FROM players WHERE gameID = :id";
+			$stmt5 = $db->prepare($sql5);
+			$stmt5->bindValue('id', $args['id']);
+			$ret5 = $stmt5->execute();
+			$playersList = array();
+			while ($player = $ret5->fetchArray(SQLITE3_ASSOC))
+			{
+				array_push($playersList, $player);
+			}
+			// Get username of current player
+			$sql6 = "SELECT nextTurn FROM games WHERE gameID = :id";
+			$stmt6 = $db->prepare($sql6);
+			$stmt6->bindValue('id', $args['id']);
+			$ret6 = $stmt6->execute();
+			$nextTurn = $ret6->fetchArray(SQLITE3_ASSOC);
+			$currentPlayer = $playersList[$nextTurn['nextTurn']];
+			$gameData['currentPlayer'] = $currentPlayer;
+			return $response->withStatus(200)->withJson($gameData);
 		} else {
 			return $response->withStatus(404)->withJson(['error' => 'This game does not exist']);
 		}
@@ -197,44 +260,135 @@ $app->post(
     '/api/lobby/{id}/{username}',
     function (Request $request, Response $response, array $args) use ($db) {
 		// Get the letters that were used
-		$sql1 = "INSERT INTO players (player, gameID) VALUES (:username, :id)";
+		$sql1 = "INSERT INTO players (player, gameID, points) VALUES (:username, :id, :points)";
 		$stmt1 = $db->prepare($sql1);
 		$stmt1->bindValue('username', $args['username']);
 		$stmt1->bindValue('id', $args['id']);
+		$stmt1->bindValue('points', 0);
 		$ret1 = $stmt1->execute();
 	}
 );
 
-// Submit a letter
+// Submit player value, attribute points and change which player has to play
 $app->post(
     '/api/play/{id}',
     function (Request $request, Response $response, array $args) use ($db) {
         $requestData = $request->getParsedBody();
-        if (!isset($requestData['letter'])) {
-            return $response->withStatus(400)->withJson(['error' => 'letter is required']);
-        }
-		// Get the letters that were used
-		$sql1 = "SELECT letters FROM games WHERE gameID = :id";
+		// Get players list
+		$sql1 = "SELECT player FROM players WHERE gameID = :id";
 		$stmt1 = $db->prepare($sql1);
 		$stmt1->bindValue('id', $args['id']);
 		$ret1 = $stmt1->execute();
-		$letters = $ret1->fetchArray(SQLITE3_ASSOC);
-		$letters_split = str_split($letters['letters'], 1);
-		// We add the letter if it is not used
-		if (!in_array($requestData['letter'], $letters_split)) {
-			array_push($letters_split, $requestData['letter']);
-		} else {
-			return $response->withStatus(200)->withJson('Letter has already been used');
+		$playersList = array();
+		while ($player = $ret1->fetchArray(SQLITE3_ASSOC))
+		{
+			array_push($playersList, $player);
 		}
-		// Convert these letters (array) in letters (string)
-		$letters = implode("", $letters_split);
-		// Update the letters of this game to database
-		$sql2 = "UPDATE games SET letters = :letters WHERE gameID = :id";
-        $stmt2 = $db->prepare($sql2);
+		// Get player turn
+		$sql2 = "SELECT nextTurn FROM games WHERE gameID = :id";
+		$stmt2 = $db->prepare($sql2);
 		$stmt2->bindValue('id', $args['id']);
-        $stmt2->bindValue('letters', $letters);
-        $stmt2->execute();
-        return $response->withStatus(200)->withJson('Letter has successfully been sent');
+		$ret2 = $stmt2->execute();
+		$nextTurn = $ret2->fetchArray(SQLITE3_ASSOC);
+		$currentPlayer = $playersList[$nextTurn['nextTurn']];
+		// Check if this is player's turn
+		if ($currentPlayer['player'] == $requestData['player']) {
+			// Get turns order
+			$sql3 = "SELECT turnsOrder FROM games WHERE gameID = :id";
+			$stmt3 = $db->prepare($sql3);
+			$stmt3->bindValue('id', $args['id']);
+			$ret3 = $stmt3->execute();
+			$turnsOrder = $ret3->fetchArray(SQLITE3_ASSOC);
+			$turnsOrder_split = str_split($turnsOrder['turnsOrder']);
+			$key = array_search(strval($nextTurn['nextTurn']), $turnsOrder_split);
+			// We verify if he is the last player of this round
+			if ( $key + 1 == count($turnsOrder_split)) {
+				$nextTurn = $turnsOrder_split[0];
+			}
+			else {
+				$nextTurn = $turnsOrder_split[$key+1];
+			}
+			// Update the player turn
+			$sql4 = "UPDATE games SET nextTurn = :nextPlayer WHERE gameID = :id";
+			$stmt4 = $db->prepare($sql4);
+			$stmt4->bindValue('nextPlayer', $nextTurn);
+			$stmt4->bindValue('id', $args['id']);
+			$ret4 = $stmt4->execute();		
+			// If player value is null
+			if (!isset($requestData['playerValue'])) {
+				return $response->withStatus(200)->withJson('A value is required !');
+			}
+			// If player value contains a special character
+			if (preg_match('/[\'^£$%&*()}{@#~?><>,|=_+¬-]/', $requestData['playerValue'])) {
+				return $response->withStatus(200)->withJson('No special character allowed !');
+			}
+			// Put player value to lowercase
+			$requestData['playerValue'] = strtolower($requestData['playerValue']);
+			// Check player value length
+			$length = strlen($requestData['playerValue']);
+			// Get puzzle value
+			$sql5 = "SELECT puzzle FROM games WHERE gameID = :id";
+			$stmt5 = $db->prepare($sql5);
+			$stmt5->bindValue('id', $args['id']);
+			$ret5 = $stmt5->execute();
+			$puzzle = $ret5->fetchArray(SQLITE3_ASSOC);
+			// If length is more than 1 character we check if the player guessed the puzzle correctly
+			if ($length > 1) {
+				// If player guess correctly the puzzle
+				if ($puzzle['puzzle'] == $requestData['playerValue']) {
+					// Update the points won by the player
+					$sql6 = "UPDATE players SET points = points + :length WHERE player = :player AND gameID = :id";
+					$stmt6 = $db->prepare($sql6);
+					$stmt6->bindValue('length', $length);
+					$stmt6->bindValue('player', $requestData['player']);
+					$stmt6->bindValue('id', $args['id']);
+					$stmt6->execute();
+					return $response->withStatus(200)->withJson('You guessed the puzzle correctly ! Congratulations !');
+					// Complete the puzzle
+				} else {
+					return $response->withStatus(200)->withJson("Sorry you didn't guess the puzzle correctly");
+				}	
+			// else we check if the letter sent is correct
+			} else {
+				// Get the letters that were used
+				$sql7 = "SELECT letters FROM games WHERE gameID = :id";
+				$stmt7 = $db->prepare($sql7);
+				$stmt7->bindValue('id', $args['id']);
+				$ret7 = $stmt7->execute();
+				$letters = $ret7->fetchArray(SQLITE3_ASSOC);
+				$letters_split = str_split($letters['letters'], 1);
+				// We add the letter if it is not used
+				if (!in_array($requestData['playerValue'], $letters_split)) {
+					array_push($letters_split, $requestData['playerValue']);
+				} else {
+					return $response->withStatus(200)->withJson('Letter has already been used !');
+					//return $response->withStatus(200)->withJson($key);
+				}
+				// Convert these letters (array) in letters (string)
+				$letters = implode("", $letters_split);
+				// Update the letters of this game to database
+				$sql8 = "UPDATE games SET letters = :letters WHERE gameID = :id";
+				$stmt8 = $db->prepare($sql8);
+				$stmt8->bindValue('id', $args['id']);
+				$stmt8->bindValue('letters', $letters);
+				$stmt8->execute();
+				// If the letter is in the puzzle the player gain x points
+				if (strpos($puzzle['puzzle'], $requestData['playerValue']) !== false) {
+					$points = substr_count($puzzle['puzzle'], $requestData['playerValue']);
+					$sql9 = "UPDATE players SET points = points + :point WHERE player = :player AND gameID = :id";
+					$stmt9 = $db->prepare($sql9);
+					$stmt9->bindValue('point', $points);
+					$stmt9->bindValue('player', $requestData['player']);
+					$stmt9->bindValue('id', $args['id']);
+					$stmt9->execute();
+					return $response->withStatus(200)->withJson('You guessed the letter correctly');
+				} else {
+					return $response->withStatus(200)->withJson('Sorry this letter is not part of the puzzle');
+				}	
+			}
+		} else {
+			return $response->withStatus(200)->withJson('This is not your turn !');
+		}
     }
 );
 $app->run();

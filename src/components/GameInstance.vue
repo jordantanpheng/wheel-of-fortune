@@ -1,5 +1,6 @@
 <template>
   <div>
+	<!-- Username input -->
 	<div v-if="inputUsername">
 		<br><br>
 		<form @submit.prevent="sendUsername()">
@@ -10,6 +11,8 @@
 			<div class="server">{{ serverMessage }}</div>
 		</form>		
 	</div>
+	
+	<!-- Lobby where we wait for other players  -->
 	<div class="waitingPlayers" v-if="waitingPlayers">
 		<br><br>
 		<p>Waiting for more players: {{ numberOfPlayers }} / 8</p>
@@ -21,15 +24,33 @@
 			<button :disabled="startButtonDisabled" class="btn btn-warning">Start Game</button>
 		</form>
 	</div>
+	
+	<!-- Data from the game -->
 	<div v-if="gameStarted">
+		<!-- Puzzle data -->
 		<br><br>
-		<div class="puzzle">{{ gameData }}</div>
+		<div class="puzzle">{{ gameData.puzzle }}</div>
 		<br><br>
-		<form @submit.prevent="sendLetter()">
-			<input type="text" placeholder="Enter a letter" v-model="letter.letter">
+		
+		<!-- Players data -->
+		<p>Player turn: {{ gameData.currentPlayer.player }}</p>
+
+		
+		<p>Points:</p>
+		<li v-for="data in gameData.points" :key="data.player">
+           {{ data.player }}: {{ data.points }}
+        </li>
+		<br>
+		
+		<!-- Data sent by the player -->
+		<form @submit.prevent="sendplayerValue()">
+			<input type="text" v-model="submit">
 			<br><br>
 			<button class="btn btn-warning">Send letter</button>
 			<br><br>
+			<button class="btn btn-danger">Guess puzzle</button>
+			<br><br>
+			<p>Letters used: {{ gameData.letters.letters }}</p>
 			<div class="server">{{ serverMessage }}</div>
 		</form>
 	</div>
@@ -47,9 +68,13 @@ export default {
 		playersList: "",
 		numberOfPlayers: "",
 		username: "",
-		gameData: "",
+		gameData: {
+			puzzle: "",
+			currentPlayer: "",
+			letters: ""
+		},
 		gameStatus: "",
-		letter: {},
+		submit: "",
 		serverMessage: ""
 	} 
   },  
@@ -69,8 +94,9 @@ export default {
 		this.gameStarted = true;
 		this.inputUsername = false;
 	},
-	sendLetter() {
-		this.$http.post(window.location.pathname, this.letter).then(response => {
+	sendplayerValue() {
+		var toSubmit = { player : this.$cookies.get('username'), playerValue : this.submit}
+		this.$http.post(window.location.pathname, toSubmit).then(response => {
 			this.serverMessage = response.body;
 		});
 	},
