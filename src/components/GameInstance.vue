@@ -75,20 +75,21 @@ export default {
 		},
 		gameStatus: "",
 		submit: "",
-		serverMessage: ""
+		serverMessage: "",
+		apiGameUrl: ""
 	} 
   },  
   methods: {
 	sendUsername() {
 		this.$cookies.set('username', this.username);
-		this.$http.post(window.location.pathname + '/' + this.username);
+		this.$http.post(this.apiGameUrl + '/' + this.username);
 		this.waitingPlayers = true;
 		this.gameStarted = false;
 		this.inputUsername = false;	
 	},
 	startGame() {
 		// Update game status
-		this.$http.post(window.location.pathname + '/status/start');	
+		this.$http.post(this.apiGameUrl + '/status/start');
 		this.redirectFromLobbyToGame();
 		this.waitingPlayers = false;
 		this.gameStarted = true;
@@ -96,20 +97,20 @@ export default {
 	},
 	sendplayerValue() {
 		var toSubmit = { player : this.$cookies.get('username'), playerValue : this.submit}
-		this.$http.post(window.location.pathname, toSubmit).then(response => {
+		this.$http.post(this.apiGameUrl, toSubmit).then(response => {
 			this.serverMessage = response.body;
 		});
 	},
 	refreshPlayersList() {
 		// We first need to check if game status changed
-		this.$http.get(window.location.pathname + '/status').then(response => {
+		this.$http.get(this.apiGameUrl + '/status').then(response => {
 			this.gameStatus = JSON.parse(JSON.stringify(response.body));
 		});
 		if (this.gameStatus.status == 'gameStarted') {
 			this.redirectFromLobbyToGame();
 		}
 		// If not we get players list
-		this.$http.get(window.location.pathname + '/players').then(response => {
+		this.$http.get(this.apiGameUrl + '/players').then(response => {
 			this.playersList = response.body;
 			this.numberOfPlayers = this.playersList.length;
 			if (this.numberOfPlayers > 1) {
@@ -118,7 +119,7 @@ export default {
 		});
 	},
 	refreshGameState() {
-		this.$http.get(window.location.pathname).then(response => {
+		this.$http.get(this.apiGameUrl).then(response => {
 			this.gameData = response.body;
 		});
 	},
@@ -132,7 +133,8 @@ export default {
   mounted(){
 	if (window.location.pathname.split('/')[2] == 'lobby' || window.location.pathname.split('/')[2] == 'play') {
 		// Check game status
-		this.$http.get(window.location.pathname + '/status').then(response => {
+		this.apiGameUrl = window.location.pathname.replace('front', 'api');
+		this.$http.get(this.apiGameUrl + '/status').then(response => {
 			this.gameStatus = JSON.parse(JSON.stringify(response.body));
 			// If we are waiting for players to come
 			if (this.gameStatus.status == 'waitingPlayers') {
@@ -157,7 +159,7 @@ export default {
 					this.waitingPlayers = false;
 					this.gameStarted = true;
 					// Get Game Data
-					this.$http.get(window.location.pathname).then(response => {
+					this.$http.get(this.apiGameUrl).then(response => {
 						this.gameData = response.body;
 					});
 				} else {
