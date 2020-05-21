@@ -7,7 +7,7 @@
 		<br><br>
 		<button @click.prevent="createNewGame()" class="btn btn-warning">Create Game</button>
 		<br><br>
-		<a v-bind:href="'/api/lobby/'+ game.id">{{ lobbyLink }}</a>
+		<a v-bind:href="'/front/lobby/'+ game.id">{{ lobbyLink }}</a>
 	</div>
 	<div v-show="inLobby">
 		<game-instance @startGameInstance="startGameInstance()"></game-instance>
