@@ -1,5 +1,5 @@
 RewriteEngine On
-#RewriteRule ^api api.php [QSA]
+RewriteRule ^api api.php [QSA]
 RewriteCond %{THE_REQUEST} /index\.html [NC]
 RewriteCond %{REQUEST_URI} ^(.*/)index\.html$ [NC]
 RewriteRule ^ %1 [L,R=301,NE]
