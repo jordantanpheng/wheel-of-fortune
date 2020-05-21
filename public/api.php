@@ -177,6 +177,7 @@ $app->post(
 $app->get(
 	'/api/play/{id}',
     function (Request $request, Response $response, array $args) use ($db) {
+		$gameData = array();
 		// Check if this game exist
 		$sql1 = "SELECT gameID FROM games WHERE gameID = :id";
 		$stmt1 = $db->prepare($sql1);
@@ -184,7 +185,7 @@ $app->get(
 		$ret1 = $stmt1->execute();
 		$gameID = $ret1->fetchArray(SQLITE3_ASSOC);
 		// If this game exist
-		if ($gameID) {	
+		if ($gameID) {
 			// Get the puzzle of this game 
 			$sql2 = "SELECT puzzle FROM games WHERE gameID = :id";
 			$stmt2 = $db->prepare($sql2);
@@ -198,27 +199,36 @@ $app->get(
 			$stmt3->bindValue('id', $args['id']);
 			$ret3 = $stmt3->execute();
 			$letters = $ret3->fetchArray(SQLITE3_ASSOC);
-			$gameData = array();
 			$gameData['letters'] = $letters;
 			$letters_split = str_split($letters['letters'], 1);
-			// Initialize puzzle to display by setting all the letters to "_"
-			$puzzle_to_display = [];
-			for ($i = 0; $i < count($puzzle_split); $i++) {
-				$puzzle_to_display[$i] = "_";
-			}
-			// Replace "_" by the letters used
-			$count = 0;
-			foreach($puzzle_split as $letter_of_puzzle) {
-				foreach($letters_split as $letter){
-					if ($letter_of_puzzle == $letter) {
-						$puzzle_to_display[$count] = $letter;
-					}
+			// Show the puzzle if the status of the game is "gameFinished"
+			$sql7 = "SELECT status FROM games WHERE gameID = :id";
+			$stmt7 = $db->prepare($sql7);
+			$stmt7->bindValue('id', $args['id']);
+			$ret7 = $stmt7->execute();
+			$status = $ret7->fetchArray(SQLITE3_ASSOC);
+			if ($status['status'] == 'gameFinished') {
+				$gameData['puzzle'] = $puzzle['puzzle'];
+			} else {
+				// Initialize puzzle to display by setting all the letters to "_"
+				$puzzle_to_display = [];
+				for ($i = 0; $i < count($puzzle_split); $i++) {
+					$puzzle_to_display[$i] = "_";
 				}
-				$count++;
+				// Replace "_" by the letters used
+				$count = 0;
+				foreach($puzzle_split as $letter_of_puzzle) {
+					foreach($letters_split as $letter){
+						if ($letter_of_puzzle == $letter) {
+							$puzzle_to_display[$count] = $letter;
+						}
+					}
+					$count++;
+				}
+				// Convert this puzzle (array) in puzzle (string)
+				$puzzle_to_display = implode("", $puzzle_to_display);
+				$gameData['puzzle'] = $puzzle_to_display;
 			}
-			// Convert this puzzle (array) in puzzle (string)
-			$puzzle_to_display = implode("", $puzzle_to_display);
-			$gameData['puzzle'] = $puzzle_to_display;
 			// Get player points
 			$sql4 = "SELECT player, points FROM players WHERE gameID = :id";
 			$stmt4 = $db->prepare($sql4);
@@ -343,8 +353,13 @@ $app->post(
 					$stmt6->bindValue('player', $requestData['player']);
 					$stmt6->bindValue('id', $args['id']);
 					$stmt6->execute();
+					// 	Set game state to "gameFinished"
+					$sql10 = "UPDATE games SET status = :status WHERE gameID = :id";
+					$stmt10 = $db->prepare($sql10);
+					$stmt10->bindValue('status', 'gameFinished');
+					$stmt10->bindValue('id', $args['id']);
+					$ret10 = $stmt10->execute();
 					return $response->withStatus(200)->withJson('You guessed the puzzle correctly ! Congratulations !');
-					// Complete the puzzle
 				} else {
 					return $response->withStatus(200)->withJson("Sorry you didn't guess the puzzle correctly");
 				}	
