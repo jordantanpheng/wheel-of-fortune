@@ -1,9 +1,7 @@
 RewriteEngine On
-RewriteRule ^api api.php [QSA]
-RewriteCond %{THE_REQUEST} /index\.html [NC]
-RewriteCond %{REQUEST_URI} ^(.*/)index\.html$ [NC]
-RewriteRule ^ %1 [L,R=301,NE]
+
+RewriteRule ^api api.php [QSA,L]
 
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
-RewriteRule ^(?!index\.html$|Pages)(.*)$ index.html?path=$1 [L,NC]
+RewriteRule .* index.html [QSA,L]
